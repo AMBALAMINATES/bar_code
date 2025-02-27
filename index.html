@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AMBA</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    .qr-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .qr-item {
+      text-align: center;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      width: fit-content;
+      cursor: pointer;
+    }
+    .qr-label {
+      font-size: 14px;
+      margin-top: 5px;
+    }
+    .print-button {
+      margin-top: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #f4f4f4;
+    }
+    @media print {
+      button, input, form {
+        display: none;
+      }
+      .qr-container {
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h2>AMBA QR</h2>
+  <form id="qr-form">
+    <label for="party">Enter Party Name:</label>
+    <input type="text" id="party" required><br><br>
+
+    <label for="sku">Enter SKU:</label>
+    <input type="text" id="sku" required><br><br>
+
+    <label for="thickness">Enter Thickness (in mm):</label>
+    <input type="text" id="thickness" required><br><br>
+
+    <label for="quantity">Enter Required Quantity:</label>
+    <input type="number" id="quantity" min="1" value="10" required><br><br>
+
+    <button type="submit">Generate QR Codes</button>
+  </form>
+
+  <h3>Filter Data by Date</h3>
+  <input type="date" id="filter-date">
+  <button onclick="filterData()">Filter</button>
+
+  <table id="data-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Party Name</th>
+        <th>SKU</th>
+        <th>Thickness</th>
+        <th>Quantity</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h3>Scanned Quantity</h3>
+  <table id="scanned-table">
+    <thead>
+      <tr>
+        <th>SKU</th>
+        <th>Total Quantity</th>
+        <th>Scanned Quantity</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="qr-container" class="qr-container"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>
+    let scannedData = JSON.parse(localStorage.getItem("scannedData")) || [];
+
+    
+    function updateScannedTable() {
+      const scannedTableBody = document.querySelector("#scanned-table tbody");
+      scannedTableBody.innerHTML = '';
+
+      scannedData.forEach(item => {
+        let row = `<tr>
+          <td>${item.sku}</td>
+          <td>${item.totalQty}</td>
+          <td>${item.scannedQty}</td>
+        </tr>`;
+        scannedTableBody.innerHTML += row;
+      });
+    }
+
+    
+    function addScannedData(sku, totalQty) {
+      let existingItem = scannedData.find(item => item.sku === sku);
+      if (existingItem) {
+        if (existingItem.scannedQty < totalQty) {
+          existingItem.scannedQty++;
+        } else {
+          alert(`Error: Cannot scan more than the required quantity (${totalQty}).`);
+        }
+      } else {
+        scannedData.push({ sku, totalQty, scannedQty: 1 });
+      }
+      localStorage.setItem("scannedData", JSON.stringify(scannedData));
+      updateScannedTable();
+    }
+
+    document.getElementById('qr-form').addEventListener('submit', function(event) {
+      event.preventDefault();
+
+      const party = document.getElementById('party').value.trim();
+      const sku = document.getElementById('sku').value.trim();
+      const thickness = document.getElementById('thickness').value.trim();
+      const quantity = parseInt(document.getElementById('quantity').value);
+      const date = new Date().toISOString().split('T')[0]; 
+
+      if (!party || !sku || !thickness || quantity <= 0) {
+        alert('Please enter all details correctly.');
+        return;
+      }
+
+      let storedData = JSON.parse(localStorage.getItem("qrData")) || [];
+
+      for (let i = 0; i < quantity; i++) {
+        let uniqueID = Date.now().toString(36) + Math.random().toString(36).substr(2, 5); 
+
+        const qrData = JSON.stringify({
+          date: date,
+          id: uniqueID,
+          party: party,
+          sku: sku,
+          thickness: thickness,
+          quantity: quantity
+        });
+
+        storedData.push({
+          date: date,
+          id: uniqueID,
+          party: party,
+          sku: sku,
+          thickness: thickness,
+          quantity: quantity
+        });
+
+        const qrItem = document.createElement('div');
+        qrItem.classList.add('qr-item');
+
+        const qrDiv = document.createElement('div');
+
+        new QRCode(qrDiv, {
+          text: qrData,
+          width: 250,
+          height: 100,
+        });
+
+        const qrLabel = document.createElement('div');
+        qrLabel.classList.add('qr-label');
+        qrLabel.textContent = `AMBA LAMINATES - ID: ${uniqueID}, SKU: ${sku}, Thickness: ${thickness}`;
+
+        qrItem.addEventListener('click', () => {
+          const scannedItem = scannedData.find(item => item.sku === sku);
+          if (scannedItem && scannedItem.scannedQty >= quantity) {
+            alert('This QR has already been scanned the required quantity.');
+          } else {
+            addScannedData(sku, quantity);
+            alert(`Scanned QR Code Details:\nDate: ${date}\nID: ${uniqueID}\nParty: ${party}\nSKU: ${sku}\nThickness: ${thickness}\nRequired Quantity: ${quantity}`);
+          }
+        });
+
+        qrItem.appendChild(qrDiv);
+        qrItem.appendChild(qrLabel);
+        document.getElementById('qr-container').appendChild(qrItem);
+      }
+
+      localStorage.setItem("qrData", JSON.stringify(storedData));
+      updateScannedTable(); 
+    });
+
+    function filterData() {
+      const selectedDate = document.getElementById('filter-date').value;
+      const tableBody = document.querySelector("#data-table tbody");
+      tableBody.innerHTML = '';
+
+      if (!selectedDate) return;
+
+      let storedData = JSON.parse(localStorage.getItem("qrData")) || [];
+
+      storedData.filter(item => item.date === selectedDate).forEach(item => {
+        let row = `<tr>
+          <td>${item.date}</td>
+          <td>${item.party}</td>
+          <td>${item.sku}</td>
+          <td>${item.thickness}</td>
+          <td>${item.quantity}</td>
+        </tr>`;
+        tableBody.innerHTML += row;
+      });
+    }
+
+    
+    updateScannedTable();
+  </script>
+</body>
+</html>
